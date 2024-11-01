@@ -32,6 +32,8 @@ import sys
 import threading
 import time
 
+import chardet
+
 # Defining the constants
 MAX_THREAD_COUNT = 4
 GITHUB_API = "api.github.com"
@@ -41,7 +43,7 @@ BUFFER_SIZE = 4096
 GITHUB_URL = "https://api.github.com"
 
 # Defining the global variables
-access_token = "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"
+access_token = "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"
 username = "gorkemsolun"
 repository = "PseudoGit"
 branch = "main"
@@ -170,7 +172,118 @@ def get_repository_contents():
     # Get the list of files
     files = [file["name"] for file in response_body]
 
-    print(files)
+    return files
 
 
-get_repository_contents()
+def get_file_from_github(file_name):
+    """
+    Function to get a file from GitHub
+
+    :param file_name: The name of the file to get
+
+    :return: The content of the file and whether it is binary or not
+    """
+
+    if not access_token:
+        get_access_token()
+
+    if not username:
+        get_username()
+
+    if not repository:
+        get_repository()
+
+    # Create a secure socket
+    secure_socket = create_secure_socket()
+
+    # Construct the request
+    request = f"GET /repos/{username}/{repository}/contents/{file_name} HTTP/1.1\r\n"
+    request += f"Host: {GITHUB_API}\r\n"
+    request += f"Authorization: token {access_token}\r\n"
+    request += "User-Agent: PseudoGit\r\n"
+    request += "Accept: application/vnd.github.v3+json\r\n"
+    request += "Connection: close\r\n\r\n"
+
+    # Send the request and receive the response
+    response = send_request(secure_socket, GITHUB_API, GITHUB_PORT, request)
+
+    # Close the socket
+    secure_socket.close()
+
+    # Parse the response
+    response_body = json.loads(response["response_body"])
+
+    # Get the content of the file and decode it
+    try:
+        is_binary = False
+        raw_content = base64.b64decode(response_body["content"])
+        detected_encoding = chardet.detect(raw_content)["encoding"]
+
+        if detected_encoding:
+            content = raw_content.decode(detected_encoding)
+        else:  # if the encoding is not detected just write the raw content
+            content = raw_content
+            is_binary = True
+
+        return {"content": content, "is_binary": is_binary}
+    except UnicodeDecodeError:
+        raw_content = response_body["content"]
+        print("UnicodeDecodeError:", raw_content)
+
+    return None
+
+
+def download_file(file_name, prefix="pseudo_git_downloads"):
+    """
+    Function to download a file from GitHub
+
+    :param file_name: The name of the file to download
+    """
+
+    # Create the directory if it does not exist
+    if not os.path.exists(prefix):
+        os.makedirs(prefix)
+
+    file_data = get_file_from_github(file_name)
+    how_to_write = "wb" if file_data["is_binary"] else "w"
+
+    print(how_to_write)
+    print(file_name)
+
+    # Write the content to the file
+    with open(f"{prefix}/{file_name}", how_to_write) as file:
+        file.write(file_data["content"])
+
+
+def download_files(files, prefix="pseudo_git_downloads"):
+    """
+    Function to download files from GitHub
+
+    :param files: The list of files to download
+    """
+
+    threads = []
+
+    for file in files:
+        thread = threading.Thread(target=download_file, args=(file, prefix))
+        threads.append(thread)
+        thread.start()
+
+        if len(threads) >= MAX_THREAD_COUNT:
+            for thread in threads:
+                thread.join()
+            threads = []
+
+    for thread in threads:
+        thread.join()
+
+
+def main():
+    repo_contents = get_repository_contents()
+    print("Repository contents:", repo_contents)
+    download_files(repo_contents)
+    print("Files downloaded successfully!")
+
+
+if __name__ == "__main__":
+    main()
