@@ -445,7 +445,7 @@ def delete_branch(branch_name):
         print(f"Failed to delete branch {branch_name}")
 
 
-def push_changes(file_name, branch_name):
+def push_changes(file_name, branch_name, message="Pushed changes"):
     """
     Function to push the changes to the repository
 
@@ -474,10 +474,10 @@ def push_changes(file_name, branch_name):
     request += "Accept: application/vnd.github.v3+json\r\n"
     request += "Content-Type: application/json\r\n"
     request += "Connection: close\r\n"
-    request += f"Content-Length: {len(json.dumps({'message': 'Add new file', 'content': content, 'branch': branch_name, 'sha': sha}))}\r\n\r\n"
+    request += f"Content-Length: {len(json.dumps({'message': message, 'content': content, 'branch': branch_name, 'sha': sha}))}\r\n\r\n"
     request += json.dumps(
         {
-            "message": "Add new file",
+            "message": message,
             "content": content,
             "branch": branch_name,
             "sha": sha,
@@ -497,19 +497,155 @@ def push_changes(file_name, branch_name):
         print(f"Failed to push changes to branch {branch_name}")
 
 
+def create_pull_request(title, body, head, base):
+    """
+    Function to create a pull request
+
+    :param title: The title of the pull request
+    :param body: The body of the pull request
+    :param head: The head branch
+    :param base: The base branch
+    """
+
+    # Create a secure socket
+    secure_socket = create_secure_socket()
+
+    # Construct the request
+    request = f"POST /repos/{username}/{repository}/pulls HTTP/1.1\r\n"
+    request += f"Host: {GITHUB_API}\r\n"
+    request += f"Authorization: token {access_token}\r\n"
+    request += "User-Agent: PseudoGit\r\n"
+    request += "Accept: application/vnd.github.v3+json\r\n"
+    request += "Content-Type: application/json\r\n"
+    request += "Connection: close\r\n"
+    request += f"Content-Length: {len(json.dumps({'title': title, 'body': body, 'head': head, 'base': base}))}\r\n\r\n"
+    request += json.dumps({"title": title, "body": body, "head": head, "base": base})
+
+    # Send the request and receive the response
+    response = send_request(secure_socket, GITHUB_API, GITHUB_PORT, request)
+
+    # Close the socket
+    secure_socket.close()
+
+    # Parse the response
+    if response["status_code"] == b"201":
+        print(f"Pull request created successfully")
+    else:
+        print(f"Failed to create pull request")
+
+
+def list_open_pull_requests():
+    """
+    Function to list the open pull requests
+    """
+
+    # Create a secure socket
+    secure_socket = create_secure_socket()
+
+    # Construct the request
+    request = f"GET /repos/{username}/{repository}/pulls HTTP/1.1\r\n"
+    request += f"Host: {GITHUB_API}\r\n"
+    request += f"Authorization: token {access_token}\r\n"
+    request += "User-Agent: PseudoGit\r\n"
+    request += "Accept: application/vnd.github.v3+json\r\n"
+    request += "Connection: close\r\n\r\n"
+
+    # Send the request and receive the response
+    response = send_request(secure_socket, GITHUB_API, GITHUB_PORT, request)
+
+    # Close the socket
+    secure_socket.close()
+
+    # Parse the response
+    response_body = json.loads(response["response_body"])
+
+    # Return the list of pull requests' numbers
+    return [pull_request["number"] for pull_request in response_body]
+
+
+def merge_pull_request(pull_request_number):
+    """
+    Function to merge a pull request
+
+    :param pull_request_number: The number of the pull request
+    """
+
+    # Create a secure socket
+    secure_socket = create_secure_socket()
+
+    # Construct the request
+    request = f"PUT /repos/{username}/{repository}/pulls/{pull_request_number}/merge HTTP/1.1\r\n"
+    request += f"Host: {GITHUB_API}\r\n"
+    request += f"Authorization: token {access_token}\r\n"
+    request += "User-Agent: PseudoGit\r\n"
+    request += "Accept: application/vnd.github.v3+json\r\n"
+    request += "Content-Type: application/json\r\n"
+    request += "Connection: close\r\n\r\n"
+
+    # Send the request and receive the response
+    response = send_request(secure_socket, GITHUB_API, GITHUB_PORT, request)
+
+    # Close the socket
+    secure_socket.close()
+
+    # Parse the response
+    if response["status_code"] == b"200":
+        print(f"Pull request merged successfully")
+    else:
+        print(f"Failed to merge pull request")
+
+
+def close_pull_request(pull_request_number):
+    """
+    Function to close a pull request
+
+    :param pull_request_number: The number of the pull request
+    """
+
+    # Create a secure socket
+    secure_socket = create_secure_socket()
+
+    # Construct the request
+    request = (
+        f"PATCH /repos/{username}/{repository}/pulls/{pull_request_number} HTTP/1.1\r\n"
+    )
+    request += f"Host: {GITHUB_API}\r\n"
+    request += f"Authorization: token {access_token}\r\n"
+    request += "User-Agent: PseudoGit\r\n"
+    request += "Accept: application/vnd.github.v3+json\r\n"
+    request += "Content-Type: application/json\r\n"
+    request += "Connection: close\r\n"
+    request += f"Content-Length: {len(json.dumps({'state': 'closed'}))}\r\n\r\n"
+    request += json.dumps({"state": "closed"})
+
+    # Send the request and receive the response
+    response = send_request(secure_socket, GITHUB_API, GITHUB_PORT, request)
+
+    # Close the socket
+    secure_socket.close()
+
+    # Parse the response
+    if response["status_code"] == b"200":
+        print(f"Pull request closed successfully")
+    else:
+        print(f"Failed to close pull request")
+
+
 def main():
     # Get the repository contents and download small files
     """repo_contents = get_repository_contents()
     print("Repository contents:", repo_contents)
     download_files(repo_contents)"""
 
-    """ create_branch("new_branch")
-    time.sleep(5)
-    push_changes("deneme.py", "new_branch")
-    time.sleep(5)
-    delete_branch("new_branch") """
+    """ create_branch("new_branch") """
+    """ push_changes("deneme.py", "new_branch") """
+    """ delete_branch("new_branch") """
 
-    push_changes("PseudoGit.py", "main")
+    """ create_pull_request("Pull Request Title", "Pull Request Body", "new_branch", "main") """
+    """ open_pull_requests = list_open_pull_requests()
+    print("Open pull requests:", open_pull_requests) """
+    """ close_pull_request(open_pull_requests[0]) """
+    """ merge_pull_request(open_pull_requests[0]) """
 
 
 if __name__ == "__main__":
