@@ -313,11 +313,203 @@ def download_files(files, directory="pseudo_git_downloads"):
         thread.join()
 
 
+def get_latest_commit_sha():
+    """
+    Function to get the latest commit SHA
+
+    :return: The latest commit SHA
+    """
+
+    # Create a secure socket
+    secure_socket = create_secure_socket()
+
+    # Construct the request
+    request = f"GET /repos/{username}/{repository}/branches/{branch} HTTP/1.1\r\n"
+    request += f"Host: {GITHUB_API}\r\n"
+    request += f"Authorization: token {access_token}\r\n"
+    request += "User-Agent: PseudoGit\r\n"
+    request += "Accept: application/vnd.github.v3+json\r\n"
+    request += "Connection: close\r\n\r\n"
+
+    # Send the request and receive the response
+    response = send_request(secure_socket, GITHUB_API, GITHUB_PORT, request)
+
+    # Close the socket
+    secure_socket.close()
+
+    # Parse the response
+    response_body = json.loads(response["response_body"])
+    sha = response_body["commit"]["sha"]
+
+    return sha
+
+
+def get_file_sha(file_name):
+    """
+    Function to get the SHA of a file
+
+    :param file_name: The name of the file
+
+    :return: The SHA of the file
+    """
+
+    # Create a secure socket
+    secure_socket = create_secure_socket()
+
+    # Construct the request
+    request = f"GET /repos/{username}/{repository}/contents/{file_name} HTTP/1.1\r\n"
+    request += f"Host: {GITHUB_API}\r\n"
+    request += f"Authorization: token {access_token}\r\n"
+    request += "User-Agent: PseudoGit\r\n"
+    request += "Accept: application/vnd.github.v3+json\r\n"
+    request += "Connection: close\r\n\r\n"
+
+    # Send the request and receive the response
+    response = send_request(secure_socket, GITHUB_API, GITHUB_PORT, request)
+
+    # Close the socket
+    secure_socket.close()
+
+    # Parse the response
+    response_body = json.loads(response["response_body"])
+    sha = response_body["sha"]
+
+    return sha
+
+
+def create_branch(branch_name):
+    """
+    Function to create a new branch
+
+    :param branch_name: The name of the new branch
+    """
+
+    # Get the latest commit SHA
+    sha = get_latest_commit_sha()
+
+    # Create a secure socket
+    secure_socket = create_secure_socket()
+
+    # Construct the request
+    request = f"POST /repos/{username}/{repository}/git/refs HTTP/1.1\r\n"
+    request += f"Host: {GITHUB_API}\r\n"
+    request += f"Authorization: token {access_token}\r\n"
+    request += "User-Agent: PseudoGit\r\n"
+    request += "Accept: application/vnd.github.v3+json\r\n"
+    request += "Content-Type: application/json\r\n"
+    request += "Connection: close\r\n"
+    request += f"Content-Length: {len(json.dumps({'ref': f'refs/heads/{branch_name}', 'sha': sha}))}\r\n\r\n"
+    request += json.dumps({"ref": f"refs/heads/{branch_name}", "sha": sha})
+
+    # Send the request and receive the response
+    response = send_request(secure_socket, GITHUB_API, GITHUB_PORT, request)
+
+    # Close the socket
+    secure_socket.close()
+
+    # Parse the response
+    if response["status_code"] == b"201":
+        print(f"Branch {branch_name} created successfully")
+    else:
+        print(f"Failed to create branch {branch_name}")
+
+
+def delete_branch(branch_name):
+    """
+    Function to delete a branch
+
+    :param branch_name: The name of the branch to delete
+    """
+
+    # Create a secure socket
+    secure_socket = create_secure_socket()
+
+    # Construct the request
+    request = f"DELETE /repos/{username}/{repository}/git/refs/heads/{branch_name} HTTP/1.1\r\n"
+    request += f"Host: {GITHUB_API}\r\n"
+    request += f"Authorization: token {access_token}\r\n"
+    request += "User-Agent: PseudoGit\r\n"
+    request += "Accept: application/vnd.github.v3+json\r\n"
+    request += "Connection: close\r\n\r\n"
+
+    # Send the request and receive the response
+    response = send_request(secure_socket, GITHUB_API, GITHUB_PORT, request)
+
+    # Close the socket
+    secure_socket.close()
+
+    # Parse the response
+    if response["status_code"] == b"204":
+        print(f"Branch {branch_name} deleted successfully")
+    else:
+        print(f"Failed to delete branch {branch_name}")
+
+
+def push_changes(file_name, branch_name):
+    """
+    Function to push the changes to the repository
+
+    :param file_name: The name of the file to push
+    :param branch_name: The name of the branch to push to
+    """
+
+    # Get the file SHA
+    sha = get_file_sha(file_name)
+
+    # Read the file content
+    with open(file_name, "rb") as file:
+        content = file.read()
+
+    # Encode the file content
+    content = base64.b64encode(content).decode()
+
+    # Create a secure socket
+    secure_socket = create_secure_socket()
+
+    # Construct the request
+    request = f"PUT /repos/{username}/{repository}/contents/{file_name} HTTP/1.1\r\n"
+    request += f"Host: {GITHUB_API}\r\n"
+    request += f"Authorization: token {access_token}\r\n"
+    request += "User-Agent: PseudoGit\r\n"
+    request += "Accept: application/vnd.github.v3+json\r\n"
+    request += "Content-Type: application/json\r\n"
+    request += "Connection: close\r\n"
+    request += f"Content-Length: {len(json.dumps({'message': 'Add new file', 'content': content, 'branch': branch_name, 'sha': sha}))}\r\n\r\n"
+    request += json.dumps(
+        {
+            "message": "Add new file",
+            "content": content,
+            "branch": branch_name,
+            "sha": sha,
+        }
+    )
+
+    # Send the request and receive the response
+    response = send_request(secure_socket, GITHUB_API, GITHUB_PORT, request)
+
+    # Close the socket
+    secure_socket.close()
+
+    # Parse the response
+    if response["status_code"] == b"200":
+        print(f"Changes pushed successfully to branch {branch_name}")
+    else:
+        print(f"Failed to push changes to branch {branch_name}")
+
+
 def main():
     # Get the repository contents and download small files
-    repo_contents = get_repository_contents()
+    """repo_contents = get_repository_contents()
     print("Repository contents:", repo_contents)
-    download_files(repo_contents)
+    download_files(repo_contents)"""
+
+    """ create_branch("new_branch")
+    time.sleep(5)
+    push_changes("deneme.py", "new_branch")
+    time.sleep(5)
+    delete_branch("new_branch") """
+
+    push_changes("PseudoGit.py", "main")
 
 
 if __name__ == "__main__":
