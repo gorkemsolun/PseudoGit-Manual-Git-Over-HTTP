@@ -443,17 +443,22 @@ def push_changes(file_name, branch_name, message="Pushed changes"):
     # Get the file SHA
     sha = get_file_sha(file_name)
 
-    if sha is None:
-        print(f"Failed to get the SHA of the file {file_name}")
-        print("Please make sure the file exists in the repository")
-        return
-
     # Read the file content
     with open(file_name, "rb") as file:
         content = file.read()
 
     # Encode the file content
     content = base64.b64encode(content).decode()
+
+    content_json = None
+    if sha is None:
+        content_json = json.dumps(
+            {"message": message, "content": content, "branch": branch_name}
+        )
+    else:
+        content_json = json.dumps(
+            {"message": message, "content": content, "branch": branch_name, "sha": sha}
+        )
 
     # Create a secure socket
     secure_socket = create_secure_socket()
@@ -466,15 +471,8 @@ def push_changes(file_name, branch_name, message="Pushed changes"):
     request += "Accept: application/vnd.github.v3+json\r\n"
     request += "Content-Type: application/json\r\n"
     request += "Connection: close\r\n"
-    request += f"Content-Length: {len(json.dumps({'message': message, 'content': content, 'branch': branch_name, 'sha': sha}))}\r\n\r\n"
-    request += json.dumps(
-        {
-            "message": message,
-            "content": content,
-            "branch": branch_name,
-            "sha": sha,
-        }
-    )
+    request += f"Content-Length: {len(content_json)}\r\n\r\n"
+    request += f"{content_json}"
 
     # Send the request and receive the response
     response = send_request(secure_socket, GITHUB_API, GITHUB_PORT, request)
@@ -484,7 +482,13 @@ def push_changes(file_name, branch_name, message="Pushed changes"):
 
     # Parse the response
     if response["status_code"] == b"200":
-        print(f"Changes pushed successfully to branch {branch_name}")
+        print(
+            f"Changes pushed successfully to branch {branch_name} and file {file_name} updated"
+        )
+    elif response["status_code"] == b"201":
+        print(
+            f"Changes pushed successfully to branch {branch_name} and file {file_name} created"
+        )
     else:
         print(f"Failed to push changes to branch {branch_name}")
 
