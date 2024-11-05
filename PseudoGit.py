@@ -30,9 +30,6 @@ import socket
 import ssl
 import sys
 import threading
-import time
-
-import chardet
 
 # Defining the constants
 MAX_THREAD_COUNT = 4
@@ -44,28 +41,10 @@ BUFFER_SIZE = 4096
 GITHUB_URL = "https://api.github.com"
 
 # Defining the global variables
-access_token = "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"
+access_token = "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"
 username = "gorkemsolun"
 repository = "PseudoGit"
 branch = "main"
-
-
-# Function to get the access token
-def get_access_token():
-    global access_token
-    access_token = input("Enter your access token: ")
-
-
-# Function to get the username
-def get_username():
-    global username
-    username = input("Enter your username: ")
-
-
-# Function to get the repository
-def get_repository():
-    global repository
-    repository = input("Enter the repository: ")
 
 
 # Function to create a secure socket
@@ -255,15 +234,6 @@ def get_repository_contents():
     :return: The list of files in the repository
     """
 
-    if not access_token:
-        get_access_token()
-
-    if not username:
-        get_username()
-
-    if not repository:
-        get_repository()
-
     # Create a secure socket
     secure_socket = create_secure_socket()
 
@@ -290,7 +260,7 @@ def get_repository_contents():
     return files
 
 
-def download_files(files, directory="pseudo_git_downloads"):
+def download_files(files, directory="pseudo_git_downloads", parallel_count=4):
     """
     Function to download files from GitHub
 
@@ -300,7 +270,9 @@ def download_files(files, directory="pseudo_git_downloads"):
     threads = []
 
     for file in files:
-        thread = threading.Thread(target=get_file_from_github, args=(file, directory))
+        thread = threading.Thread(
+            target=get_file_from_github, args=(file, directory, parallel_count)
+        )
         threads.append(thread)
         thread.start()
 
@@ -372,6 +344,11 @@ def get_file_sha(file_name):
 
     # Parse the response
     response_body = json.loads(response["response_body"])
+
+    # If the response_body is empty return None as the SHA
+    if not response_body or "sha" not in response_body:
+        return None
+
     sha = response_body["sha"]
 
     return sha
@@ -455,6 +432,11 @@ def push_changes(file_name, branch_name, message="Pushed changes"):
 
     # Get the file SHA
     sha = get_file_sha(file_name)
+
+    if sha is None:
+        print(f"Failed to get the SHA of the file {file_name}")
+        print("Please make sure the file exists in the repository")
+        return
 
     # Read the file content
     with open(file_name, "rb") as file:
@@ -632,20 +614,73 @@ def close_pull_request(pull_request_number):
 
 
 def main():
-    # Get the repository contents and download small files
-    """repo_contents = get_repository_contents()
-    print("Repository contents:", repo_contents)
-    download_files(repo_contents)"""
 
-    """ create_branch("new_branch") """
-    """ push_changes("deneme.py", "new_branch") """
-    """ delete_branch("new_branch") """
+    print(
+        """Usage of the PseudoGit:
+        Core commands:
+        python PseudoGit.py clone <username>/<repository_name> <parallel_count>
+        python PseudoGit.py branch <username>/<repository_name> <branch_name>
+        python PseudoGit.py upload <username>/<repository_name> <branch_name> <file_name>
+        python PseudoGit.py create-pr <username>/<repository_name> <branch_name>
+        python PseudoGit.py list-pr <username>/<repository_name>
+        python PseudoGit.py merge-pr <username>/<repository_name> <pr_number>
+        
+        Additional commands:
+        python PseudoGit.py delete-branch <username>/<repository_name> <branch_name>
+        python PseudoGit.py close-pr <username>/<repository_name> <pr_number>
+        
+        Additionally, you need to enter your access token when prompted.
+        """
+    )
 
-    """ create_pull_request("Pull Request Title", "Pull Request Body", "new_branch", "main") """
-    """ open_pull_requests = list_open_pull_requests()
-    print("Open pull requests:", open_pull_requests) """
-    """ close_pull_request(open_pull_requests[0]) """
-    """ merge_pull_request(open_pull_requests[0]) """
+    if len(sys.argv) < 3:
+        print("Invalid number of arguments")
+        return
+
+    global access_token
+    if not access_token:
+        access_token = input("Enter your access token: ")
+
+    global username
+    global repository
+    command = sys.argv[1]
+    username, repository = sys.argv[2].split("/")
+
+    if command == "clone":
+        parallel_count = int(sys.argv[3]) if len(sys.argv) == 4 else 4
+        files = get_repository_contents()
+        download_files(files, repository, parallel_count)
+
+    if command == "branch":
+        branch_name = sys.argv[3]
+        create_branch(branch_name)
+
+    if command == "delete-branch":
+        branch_name = sys.argv[3]
+        delete_branch(branch_name)
+
+    if command == "upload":
+        branch_name = sys.argv[3]
+        file_name = sys.argv[4]
+        push_changes(file_name, branch_name)
+
+    if command == "create-pr":
+        branch_name = sys.argv[3]
+        create_pull_request(
+            "Pull Request Title", "Pull Request Body", branch_name, "main"
+        )
+
+    if command == "close-pr":
+        pull_request_number = int(sys.argv[3])
+        close_pull_request(pull_request_number)
+
+    if command == "list-pr":
+        open_pull_requests = list_open_pull_requests()
+        print("Open pull requests:", open_pull_requests)
+
+    if command == "merge-pr":
+        pull_request_number = int(sys.argv[3])
+        merge_pull_request(pull_request_number)
 
 
 if __name__ == "__main__":
