@@ -125,10 +125,6 @@ def get_file_from_github(file_name, directory="pseudo_git_downloads", parallel_c
     :return: None
     """
 
-    # check if the directory exists
-    if not os.path.exists(directory):
-        os.makedirs(directory)
-
     # Create a secure socket
     secure_socket = create_secure_socket()
 
@@ -227,18 +223,21 @@ def download_file_chunk(url, start, end, file_name, directory):
         file.write(response_body.encode())
 
 
-def get_repository_contents():
+def get_repository_contents(path=""):
     """
     Function to get the contents of the repository
 
-    :return: The list of files in the repository
+    :return: The list of files in the repository and their types
     """
 
     # Create a secure socket
     secure_socket = create_secure_socket()
 
     # Construct the request
-    request = f"GET /repos/{username}/{repository}/contents HTTP/1.1\r\n"
+    request = f"GET /repos/{username}/{repository}/contents"
+    if path:
+        request += f"/{path}"
+    request += f" HTTP/1.1\r\n"
     request += f"Host: {GITHUB_API}\r\n"
     request += f"Authorization: token {access_token}\r\n"
     request += "User-Agent: PseudoGit\r\n"
@@ -255,7 +254,7 @@ def get_repository_contents():
     response_body = json.loads(response["response_body"])
 
     # Get the list of files
-    files = [file["name"] for file in response_body]
+    files = [[file["path"], file["type"]] for file in response_body]
 
     return files
 
@@ -270,8 +269,19 @@ def download_files(files, directory="pseudo_git_downloads", parallel_count=4):
     threads = []
 
     for file in files:
+        # If the file is a directory, download the files in the directory recursively
+        if file[1] == "dir":
+            # Create the directory if it does not exist
+            if file[0] not in os.listdir(directory):
+                os.mkdir(f"{directory}/{file[0]}")
+
+            sub_files = get_repository_contents(file[0])
+            download_files(sub_files, directory, parallel_count)
+            continue
+
+        # Create a new thread to download the file
         thread = threading.Thread(
-            target=get_file_from_github, args=(file, directory, parallel_count)
+            target=get_file_from_github, args=(file[0], directory, parallel_count)
         )
         threads.append(thread)
         thread.start()
@@ -649,6 +659,8 @@ def main():
     if command == "clone":
         parallel_count = int(sys.argv[3]) if len(sys.argv) == 4 else 4
         files = get_repository_contents()
+        if repository not in os.listdir():
+            os.mkdir(repository)
         download_files(files, repository, parallel_count)
 
     if command == "branch":
