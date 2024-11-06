@@ -84,11 +84,15 @@ def send_request(secure_socket, host, port, request):
     status_code = response_header.split(b"\r\n")[0].split(b" ")[1]
 
     # get the response body as a string
-    response_body_str = response_body.decode("utf-8")
+    try:
+        response_body_str = response_body.decode("utf-8")
+    except:
+        response_body_str = ""
 
     return {
         "status_code": status_code,
         "response_body": response_body_str,
+        "response_body_bytes": response_body,
         "response_header": response_header,
     }
 
@@ -126,6 +130,19 @@ def get_file_from_github(file_name, directory="pseudo_git_downloads", parallel_c
     response_body = json.loads(response["response_body"])
     content = response_body["content"]
 
+    # if the file exists in the directory and does have the same size, do not download it again
+    split_path = file_name.split("/")
+    new_directory_path = directory
+    for path in split_path[:-1]:
+        new_directory_path += f"/{path}"
+    if split_path[-1] in os.listdir(new_directory_path):
+        file_size = os.path.getsize(directory + "/" + file_name)
+        if file_size == response_body["size"]:
+            print(f"File {file_name} already exists in the directory")
+            return
+
+    print(f"Downloading file {file_name}")
+
     # If the response_body is not empty write the content to the file
     if content:
         content = base64.b64decode(content)
@@ -145,7 +162,7 @@ def get_file_from_github(file_name, directory="pseudo_git_downloads", parallel_c
     threads = []
     for i in range(parallel_count):
         start = i * chunk_size
-        end = (i + 1) * chunk_size if i < parallel_count - 1 else file_size
+        end = (i + 1) * chunk_size - 1 if i < parallel_count - 1 else file_size
         thread = threading.Thread(
             target=download_file_chunk,
             args=(download_url, start, end, f"{file_name}_{i}", directory),
@@ -196,11 +213,11 @@ def download_file_chunk(url, start, end, file_name, directory):
     secure_socket.close()
 
     # Parse the response
-    response_body = response["response_body"]
+    response_body = response["response_body_bytes"]
 
     # Write the content to the file
     with open(f"{directory}/{file_name}", "wb") as file:
-        file.write(response_body.encode())
+        file.write(response_body)
 
 
 def get_repository_contents(path=""):
@@ -251,8 +268,14 @@ def download_files(files, directory="pseudo_git_downloads", parallel_count=4):
     for file in files:
         # If the file is a directory, download the files in the directory recursively
         if file[1] == "dir":
+            split_path = file[0].split("/")
+            new_directory_path = directory
+            for path in split_path[:-1]:
+                new_directory_path += f"/{path}"
+
             # Create the directory if it does not exist
-            if file[0] not in os.listdir(directory):
+            if split_path[-1] not in os.listdir(new_directory_path):
+                print(f"Creating directory {split_path[-1]}")
                 os.mkdir(f"{directory}/{file[0]}")
 
             sub_files = get_repository_contents(file[0])
