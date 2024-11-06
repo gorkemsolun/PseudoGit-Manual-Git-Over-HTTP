@@ -1,3 +1,6 @@
+# Görkem Kadir Solun 22003214
+
+
 import base64
 import json
 import os
@@ -5,6 +8,8 @@ import socket
 import ssl
 import sys
 import threading
+
+import pandas as pd
 
 # Defining the constants
 MAX_THREAD_COUNT = 4
@@ -508,6 +513,8 @@ def create_pull_request(title, body, head, base):
 def list_open_pull_requests():
     """
     Function to list the open pull requests
+
+    :return: The list of open pull requests
     """
 
     # Create a secure socket
@@ -531,7 +538,12 @@ def list_open_pull_requests():
     response_body = json.loads(response["response_body"])
 
     # Return the list of pull requests' numbers
-    return [pull_request["number"] for pull_request in response_body]
+    list_of_pull_requests = [
+        [pull_request["number"], pull_request["title"]]
+        for pull_request in response_body
+    ]
+
+    return pd.DataFrame(list_of_pull_requests, columns=["Pull Request Number", "Title"])
 
 
 def merge_pull_request(pull_request_number):
@@ -667,7 +679,8 @@ def main():
 
     if command == "list-pr":
         open_pull_requests = list_open_pull_requests()
-        print("Open pull requests:", open_pull_requests)
+        print("Open pull requests:")
+        print(open_pull_requests)
 
     if command == "merge-pr":
         pull_request_number = int(sys.argv[3])
